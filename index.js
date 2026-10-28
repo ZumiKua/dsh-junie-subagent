@@ -20,8 +20,7 @@ import {
   assertUsableCwd,
   settleRunResult,
   subprocessRunHandle,
-} from '@deepseek-ai/dsh-subagent'
-import Schema from '@deepseek-ai/schemastery'
+} from './helpers.js'
 
 export const name = 'junie-subagent'
 
@@ -298,22 +297,11 @@ function configRouteHandler(ctx, cfg) {
 }
 
 /**
- * Row configuration, also the schema the settings service projects: `model`
- * and `effort` are the two values a person changes from the settings page.
+ * Note: this bundle deliberately exports no `Config` schema. A schemastery
+ * schema would need `@deepseek-ai/schemastery`, which is not resolvable from a
+ * profile-installed bundle; the row defaults are applied by `normalize()`
+ * instead, and the settings page is the supported way to change them.
  */
-export const Config = Schema.object({
-  providerName: Schema.string().default('junie'),
-  command: Schema.string().default(''),
-  args: Schema.array(Schema.string()).default([]),
-  model: Schema.string().default('mix.normal'),
-  effort: Schema.string().default('high'),
-  braveMode: Schema.string().default('brave-auto'),
-  permission: Schema.string().default('reject'),
-  timeoutMs: Schema.number().default(900000),
-  graceMs: Schema.number().default(3000),
-})
-
-
 
 /** ACP terminal reasons mapped onto the seam's stop-reason vocabulary. */
 const STOP_REASONS = new Map([

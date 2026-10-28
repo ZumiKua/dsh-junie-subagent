@@ -1,6 +1,6 @@
 {
   "name": "@zumikua/dsh-junie-subagent",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publishConfig": {
     "access": "public"
   },
@@ -34,6 +34,7 @@
   },
   "files": [
     "index.js",
+    "helpers.js",
     "client.js",
     "cordis.patch.yml",
     "locale/*.json",
@@ -44,11 +45,6 @@
   ],
   "engines": {
     "dsh": ">=0.2.1-rc.2"
-  },
-  "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.4",
-    "@deepseek-ai/dsh-subagent": "0.2.1-rc.2",
-    "@deepseek-ai/schemastery": "^3.0.0"
   },
   "dsh": {
     "bundle": {
