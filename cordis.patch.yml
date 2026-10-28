@@ -1,0 +1,18 @@
+# Junie as a one-shot subagent backend.
+#
+# One provider, one tool. The model and thinking depth are `Config` fields, so
+# they belong to the settings projection: change them in Settings and the next
+# delegation uses the new pair. The tool exists exactly while the provider is
+# registered, so the two rows belong together.
+- insert:
+    - id: junie-subagent
+      name: '@zumikua/dsh-junie-subagent'
+      config:
+        model: mix.normal
+        effort: high
+    - id: subagent-junie
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: junie
+        toolName: junie
+        maxDepth: provider-managed

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Junie subagent",
+    "description": "Delegates a one-shot task to the JetBrains Junie CLI over the Agent Client Protocol. Each call starts its own Junie process and returns Junie's final answer."
+  }
+}

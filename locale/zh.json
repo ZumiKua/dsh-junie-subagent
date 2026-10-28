@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Junie 子智能体",
+    "description": "通过 Agent Client Protocol 把一次性任务委派给 JetBrains Junie CLI。每次调用都会启动独立的 Junie 进程，并回传 Junie 的最终答复。"
+  }
+}
