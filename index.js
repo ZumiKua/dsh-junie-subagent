@@ -39,10 +39,13 @@ const SETTINGS_FILE = join(homedir(), '.dsh', 'junie-settings.json')
 /** Efforts Junie accepts through its ACP `effort` session option. */
 const EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max'])
 
+/** Brave modes Junie accepts through its ACP `brave_mode` session option. */
+const BRAVE_MODES = new Set(['brave-auto', 'on', 'off'])
+
 /**
  * Read the stored settings, tolerating a missing or malformed file: the row
  * config remains the fallback so a broken store cannot break delegation.
- * @returns the stored `model`/`effort` subset, possibly empty.
+ * @returns the stored `model`/`effort`/`braveMode` subset, possibly empty.
  */
 function readStoredSettings() {
   try {
@@ -51,6 +54,7 @@ function readStoredSettings() {
     const next = {}
     if (typeof parsed.model === 'string' && parsed.model.length > 0) next.model = parsed.model
     if (typeof parsed.effort === 'string' && EFFORTS.has(parsed.effort)) next.effort = parsed.effort
+    if (typeof parsed.braveMode === 'string' && BRAVE_MODES.has(parsed.braveMode)) next.braveMode = parsed.braveMode
     return next
   } catch {
     return {}
@@ -59,7 +63,7 @@ function readStoredSettings() {
 
 /**
  * Persist the settings page's choice.
- * @param value - the validated `model`/`effort` pair.
+ * @param value - the validated `model`/`effort`/`braveMode` triple.
  */
 function writeStoredSettings(value) {
   mkdirSync(dirname(SETTINGS_FILE), { recursive: true })
@@ -255,9 +259,11 @@ function configRouteHandler(ctx, cfg) {
       send(200, {
         model: stored.model ?? cfg.model,
         effort: stored.effort ?? cfg.effort,
+        braveMode: stored.braveMode ?? cfg.braveMode ?? 'brave-auto',
         stored,
         models,
         efforts: [...EFFORTS],
+        braveModes: [...BRAVE_MODES],
       })
       return
     }
@@ -269,6 +275,7 @@ function configRouteHandler(ctx, cfg) {
       }
       const model = typeof body.model === 'string' ? body.model.trim() : ''
       const effort = typeof body.effort === 'string' ? body.effort.trim() : ''
+      const braveMode = typeof body.braveMode === 'string' ? body.braveMode.trim() : ''
       if (model.length === 0) {
         send(400, { ok: false, error: 'model is required' })
         return
@@ -277,7 +284,16 @@ function configRouteHandler(ctx, cfg) {
         send(400, { ok: false, error: `effort must be one of ${[...EFFORTS].join(', ')}` })
         return
       }
-      const next = { model, effort: effort.length > 0 ? effort : 'high' }
+      if (braveMode.length > 0 && !BRAVE_MODES.has(braveMode)) {
+        send(400, { ok: false, error: `braveMode must be one of ${[...BRAVE_MODES].join(', ')}` })
+        return
+      }
+      const stored = readStoredSettings()
+      const next = {
+        model,
+        effort: effort.length > 0 ? effort : 'high',
+        braveMode: braveMode.length > 0 ? braveMode : (stored.braveMode ?? cfg.braveMode ?? 'brave-auto'),
+      }
       const verdict = await validateChoice(ctx, cfg, next.model, next.effort)
       if (!verdict.ok) {
         send(400, { ok: false, error: verdict.error, allowed: verdict.allowed })
@@ -363,7 +379,7 @@ function normalize(config) {
     args,
     model: typeof raw.model === 'string' && raw.model.length > 0 ? raw.model : undefined,
     effort: typeof raw.effort === 'string' && raw.effort.length > 0 ? raw.effort : undefined,
-    braveMode: typeof raw.braveMode === 'string' && raw.braveMode.length > 0 ? raw.braveMode : undefined,
+    braveMode: typeof raw.braveMode === 'string' && raw.braveMode.length > 0 ? raw.braveMode : 'brave-auto',
     permission: raw.permission === 'allow' ? 'allow' : 'reject',
     timeoutMs: Number.isFinite(raw.timeoutMs) && raw.timeoutMs > 0 ? raw.timeoutMs : 900000,
     graceMs: Number.isFinite(raw.graceMs) && raw.graceMs > 0 ? raw.graceMs : 3000,
@@ -533,7 +549,8 @@ async function startRun(ctx, cfg, request) {
     const stored = readStoredSettings()
     const model = stored.model ?? cfg.model
     const effort = stored.effort ?? cfg.effort
-    for (const [configId, value] of [['model', model], ['effort', effort], ['brave_mode', cfg.braveMode]]) {
+    const braveMode = stored.braveMode ?? cfg.braveMode
+    for (const [configId, value] of [['model', model], ['effort', effort], ['brave_mode', braveMode]]) {
       if (value !== undefined) await client.request('session/set_config_option', { sessionId, configId, value })
     }
   } catch (error) {

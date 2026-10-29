@@ -77,8 +77,8 @@ Claude Code, and ACP providers advertise no `agentOptions` capability.
 
 ## Settings page and storage
 
-1. The page is the **Junie** section in the settings panel; it picks the model
-   and the thinking depth.
+1. The page is the **Junie** section in the settings panel; it picks the model,
+   the thinking depth, and Junie's brave mode (`auto` / `on` / `off`).
 2. Values are read and written through a same-origin route the Host registers —
    `GET/PUT /junie-subagent/config` — and stored in `~/.dsh/junie-settings.json`.
 3. The model list comes from the `configOptions` of Junie's own ACP
@@ -86,4 +86,6 @@ Claude Code, and ACP providers advertise no `agentOptions` capability.
 4. Thinking depths are model-specific. Saving validates the pair against a
    throwaway Junie session; an unsupported combination answers `400` with the
    values that model accepts, and the option list in the page is left untouched.
-5. A change applies from the next delegation.
+5. A change applies from the next delegation. The provider never prompts: it
+   rejects every permission request, so `brave-auto` allows safe work and rejects
+   the rest, `off` rejects everything that would need approval, and `on` runs everything.

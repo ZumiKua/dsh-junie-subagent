@@ -9,6 +9,11 @@ window.__ModuleLoader__.load({
     const ROUTE = '/junie-subagent/config'
     const CUSTOM = '__custom__'
     const EFFORT_LABEL = { low: '低', medium: '中', high: '高', xhigh: '很高', max: '最高' }
+    const BRAVE_LABEL = {
+      'brave-auto': '自动（Auto）—— 安全命令放行，其余自动拒绝',
+      on: '放开（Brave）—— 全部执行，不产生确认',
+      off: '保守（Safe）—— 需要确认的动作一律拒绝',
+    }
 
     // Inherit the host theme instead of inventing colors: these tokens exist in
     // both light and dark themes, which is what keeps the panel legible.
@@ -47,6 +52,7 @@ window.__ModuleLoader__.load({
     function JunieSettings() {
       const [model, setModel] = useState('')
       const [effort, setEffort] = useState('high')
+      const [braveMode, setBraveMode] = useState('brave-auto')
       const [models, setModels] = useState([])
       const [custom, setCustom] = useState(false)
       const [loaded, setLoaded] = useState(false)
@@ -65,6 +71,9 @@ window.__ModuleLoader__.load({
           const catalog = Array.isArray(body.models) ? body.models : []
           setModel(nextModel)
           setEffort(typeof body.effort === 'string' ? body.effort : 'high')
+          setBraveMode(
+            typeof body.braveMode === 'string' && body.braveMode.length > 0 ? body.braveMode : 'brave-auto',
+          )
           setModels(catalog)
           setCustom(catalog.length === 0 || !catalog.some((entry) => entry.value === nextModel))
           setLoaded(true)
@@ -85,7 +94,7 @@ window.__ModuleLoader__.load({
             method: 'PUT',
             credentials: 'same-origin',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ model, effort }),
+            body: JSON.stringify({ model, effort, braveMode }),
           })
           const body = await response.json().catch(() => ({}))
           if (!response.ok) {
@@ -101,7 +110,7 @@ window.__ModuleLoader__.load({
         } finally {
           setBusy(false)
         }
-      }, [model, effort, load])
+      }, [model, effort, braveMode, load])
 
       if (!loaded) return h('div', { style: hintStyle }, note ?? '正在读取 Junie 配置…')
 
@@ -153,12 +162,23 @@ window.__ModuleLoader__.load({
           }, ['low', 'medium', 'high', 'xhigh', 'max'].map((id) =>
             h('option', { key: id, value: id }, `${EFFORT_LABEL[id] ?? id}（${id}）`)))),
         h('div', { style: rowStyle },
+          h('span', { style: labelStyle }, 'Brave Mode'),
+          h('select', {
+            style: controlStyle,
+            value: braveMode,
+            disabled: busy,
+            onChange: (event) => setBraveMode(event.target.value),
+          }, ['brave-auto', 'on', 'off'].map((id) =>
+            h('option', { key: id, value: id }, BRAVE_LABEL[id] ?? id)))),
+        h('div', { style: rowStyle },
           h('span', { style: labelStyle }, ''),
           h('button', { type: 'button', style: buttonStyle, disabled: busy, onClick: save },
             busy ? '保存中…' : '保存')),
         note === null ? null : h('div', { style: noteStyle }, note),
         h('div', { style: hintStyle },
           '修改后下一次 Junie 委派生效。思考深度的可选项取决于模型，不支持的组合会在保存时提示，不会改动这里的选项。'),
+        h('div', { style: hintStyle },
+          'Brave Mode 决定 Junie 遇到需要确认的动作时怎么办。插件不会弹窗，一律自动拒绝：所以「自动」放行安全命令、其余拒绝，「保守」全部拒绝，「放开」则全部执行。'),
         h('div', { style: hintStyle },
           '模型列表来自 Junie 自己的 ACP 配置项，设置保存在 ~/.dsh/junie-settings.json。'))
     }
