@@ -57,6 +57,7 @@ window.__ModuleLoader__.load({
       const [custom, setCustom] = useState(false)
       const [loaded, setLoaded] = useState(false)
       const [note, setNote] = useState(null)
+      const [fatal, setFatal] = useState(null)
       const [busy, setBusy] = useState(false)
 
       const load = useCallback(async (keepNote = false) => {
@@ -76,6 +77,9 @@ window.__ModuleLoader__.load({
           )
           setModels(catalog)
           setCustom(catalog.length === 0 || !catalog.some((entry) => entry.value === nextModel))
+          // A missing launcher is reported by the Host, not inferred from an
+          // empty catalog: no models on a valid install is a different problem.
+          setFatal(typeof body.error === 'string' && body.error.length > 0 ? body.error : null)
           setLoaded(true)
           if (!keepNote) setNote(null)
         } catch (error) {
@@ -113,6 +117,20 @@ window.__ModuleLoader__.load({
       }, [model, effort, braveMode, load])
 
       if (!loaded) return h('div', { style: hintStyle }, note ?? '正在读取 Junie 配置…')
+
+      // The launcher is the one thing the page cannot work around, so it takes
+      // over the section instead of leaving an empty model list behind.
+      if (fatal !== null) {
+        return h('div', null,
+          h('div', { style: { ...noteStyle, color: 'var(--dsw-alias-label-primary)' } },
+            '找不到 Junie CLI，无法读取模型列表。'),
+          h('div', { style: { ...hintStyle, whiteSpace: 'pre-wrap' } }, fatal),
+          h('div', { style: hintStyle },
+            '安装 Junie（https://junie.jetbrains.com），或设置 JUNIE_PATH 环境变量，或在插件行的 command 配置里指定可执行文件路径，然后重启 DSH。'),
+          h('div', { style: rowStyle },
+            h('span', { style: labelStyle }, ''),
+            h('button', { type: 'button', style: buttonStyle, onClick: () => load() }, '重新检测')))
+      }
 
       const known = models.some((entry) => entry.value === model)
       return h('div', null,

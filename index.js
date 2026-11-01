@@ -97,7 +97,7 @@ async function readJsonBody(req) {
 async function probeConfigOptions(ctx, cfg) {
   const cwd = homedir()
   const handle = ctx.subprocess.spawn({
-    argv: [cfg.command, ...cfg.args],
+    argv: [requireCommand(cfg), ...cfg.args],
     cwd,
     stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' },
     graceMs: cfg.graceMs,
@@ -180,7 +180,7 @@ async function listModels(ctx, cfg) {
 async function validateChoice(ctx, cfg, model, effort) {
   const cwd = homedir()
   const handle = ctx.subprocess.spawn({
-    argv: [cfg.command, ...cfg.args],
+    argv: [requireCommand(cfg), ...cfg.args],
     cwd,
     stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' },
     graceMs: cfg.graceMs,
@@ -264,6 +264,11 @@ function configRouteHandler(ctx, cfg) {
         models,
         efforts: [...EFFORTS],
         braveModes: [...BRAVE_MODES],
+        command: cfg.command ?? null,
+        commandSource: cfg.commandSource ?? null,
+        // The page shows this instead of an empty model list, which would
+        // otherwise look like "no models on this plan".
+        error: cfg.commandError ?? null,
       })
       return
     }
@@ -330,24 +335,90 @@ const STOP_REASONS = new Map([
 const DIAGNOSTIC_LIMIT = 4000
 
 /**
- * Resolve the Junie executable: explicit config first, then the managed
- * launcher's `current` pointer, then whatever `junie.exe` is on PATH.
+ * Locate the Junie launcher without starting it. Resolution order: the
+ * `JUNIE_PATH` environment variable, then the explicit row `command`, then the
+ * managed install's `current` version pointer, then PATH. The executable name
+ * is platform-specific, and a Windows shim (`junie.bat`) is never selected: it
+ * shells out to PowerShell, which is exactly the surface this provider avoids.
  * @param config - the raw plugin config.
- * @returns an absolute path when the managed install is present.
+ * @returns either `{ ok: true, command, source }` or the failure with every
+ * location that was tried, so the caller can report something actionable.
  */
 function resolveCommand(config) {
-  if (typeof config.command === 'string' && config.command.length > 0) return config.command
+  const isWindows = process.platform === 'win32'
+  const exeName = isWindows ? 'junie.exe' : 'junie'
+  const attempts = []
+
+  const explicit = typeof config.command === 'string' ? config.command.trim() : ''
+  if (explicit.length > 0) {
+    if (!existsSync(explicit)) {
+      return {
+        ok: false,
+        error: `Junie not found: the configured command does not exist: ${explicit}`,
+        attempts: [explicit],
+      }
+    }
+    return { ok: true, command: explicit, source: 'command' }
+  }
+
+  const fromEnv = typeof process.env.JUNIE_PATH === 'string' ? process.env.JUNIE_PATH.trim() : ''
+  if (fromEnv.length > 0) {
+    if (!existsSync(fromEnv)) {
+      return {
+        ok: false,
+        error: `Junie not found: JUNIE_PATH points at a missing path: ${fromEnv}`,
+        attempts: [fromEnv],
+      }
+    }
+    return { ok: true, command: fromEnv, source: 'JUNIE_PATH' }
+  }
+
   const root = join(homedir(), '.local', 'share', 'junie')
+  const pointer = join(root, 'current')
   try {
-    const current = readFileSync(join(root, 'current'), 'utf8').split(/\r?\n/)[0].trim()
+    const current = readFileSync(pointer, 'utf8').split(/\r?\n/)[0].trim()
     if (current.length > 0) {
-      const exe = join(root, 'versions', current, 'junie', 'junie.exe')
-      if (existsSync(exe)) return exe
+      // Windows keeps the binary under `<version>/junie/`, other platforms
+      // expose it as `<version>/bin/`.
+      const candidates = isWindows
+        ? [join(root, 'versions', current, 'junie', exeName)]
+        : [join(root, 'versions', current, 'bin', exeName), join(root, 'versions', current, exeName)]
+      for (const candidate of candidates) {
+        attempts.push(candidate)
+        if (existsSync(candidate)) return { ok: true, command: candidate, source: `managed ${current}` }
+      }
     }
   } catch {
-    // No managed install: fall through to PATH.
+    // No managed install: keep going.
   }
-  return 'junie.exe'
+
+  // PATH lookup: every directory that holds the platform executable name. Only
+  // real executables qualify; a `.bat`/`.cmd` shim is skipped on Windows.
+  for (const dir of (process.env.PATH ?? '').split(isWindows ? ';' : ':')) {
+    if (dir.length === 0) continue
+    const candidate = join(dir, exeName)
+    attempts.push(candidate)
+    if (existsSync(candidate)) return { ok: true, command: candidate, source: 'PATH' }
+  }
+
+  return {
+    ok: false,
+    error:
+      'Junie CLI not found. Install it (https://junie.jetbrains.com) or set its location with the ' +
+      'JUNIE_PATH environment variable or the plugin\'s `command` config.',
+    attempts,
+  }
+}
+
+/**
+ * Fail with an actionable message when the launcher was never located.
+ * @param cfg - the effective configuration.
+ * @throws when `command` is absent.
+ */
+function requireCommand(cfg) {
+  if (typeof cfg.command === 'string' && cfg.command.length > 0) return cfg.command
+  const tried = (cfg.commandAttempts ?? []).map((path) => `\n  - ${path}`).join('')
+  throw new Error(`${PREFIX}: ${cfg.commandError ?? 'Junie CLI not found'}${tried.length > 0 ? `\nTried:${tried}` : ''}`)
 }
 
 /**
@@ -373,9 +444,15 @@ function normalize(config) {
   const args = Array.isArray(raw.args) && raw.args.length > 0 ? raw.args.map(String) : ['--acp=true']
   if (!args.some((arg) => arg.startsWith('--acp'))) args.push('--acp=true')
   if (!args.includes('--skip-update-check')) args.push('--skip-update-check')
+  // A missing launcher is a configuration fact, not a runtime surprise: keep the
+  // failure on the config so the settings page and the run path can both name it.
+  const resolved = resolveCommand(raw)
   return {
     providerName: typeof raw.providerName === 'string' && raw.providerName.length > 0 ? raw.providerName : 'junie',
-    command: resolveCommand(raw),
+    command: resolved.ok ? resolved.command : undefined,
+    commandSource: resolved.ok ? resolved.source : undefined,
+    commandError: resolved.ok ? undefined : resolved.error,
+    commandAttempts: resolved.ok ? [] : resolved.attempts,
     args,
     model: typeof raw.model === 'string' && raw.model.length > 0 ? raw.model : undefined,
     effort: typeof raw.effort === 'string' && raw.effort.length > 0 ? raw.effort : undefined,
@@ -519,14 +596,14 @@ async function startRun(ctx, cfg, request) {
   let handle
   try {
     handle = ctx.subprocess.spawn({
-      argv: [cfg.command, ...cfg.args],
+      argv: [requireCommand(cfg), ...cfg.args],
       cwd,
       stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' },
       graceMs: cfg.graceMs,
       env: { ...cfg.env },
     })
   } catch (error) {
-    throw new Error(`${PREFIX}: cannot start ${cfg.command}: ${error instanceof Error ? error.message : String(error)}`)
+    throw new Error(`${PREFIX}: cannot start ${cfg.command ?? 'Junie'}: ${error instanceof Error ? error.message : String(error)}`)
   }
 
   const chunks = []

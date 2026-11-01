@@ -8,8 +8,15 @@ Junie 的最终答复作为子智能体结果返回。
 ## 前置条件
 
 - DSH `>= 0.2.1-rc.2`；
-- 已安装并登录 JetBrains Junie CLI —— provider 会从 `~/.local/share/junie/current`
-  解析 `junie.exe`，启动失败时会明确报错。
+- 已安装并登录 JetBrains Junie CLI。provider 按下列顺序查找：
+  1. `JUNIE_PATH` 环境变量；
+  2. 插件行的 `command` 配置；
+  3. 托管安装的 `~/.local/share/junie/current` 指针 —— Windows 上是
+     `<版本>/junie/junie.exe`，其它平台是 `<版本>/bin/junie`；
+  4. `PATH` 上的 `junie.exe` / `junie`（Windows 上跳过 `.bat` shim）。
+
+  全都找不到时，委派会带上尝试过的每个路径报错，设置页也会直接提示，而不是显示一个
+  空的模型列表。
 
 ## 安装
 
@@ -48,7 +55,7 @@ Junie 自己的权限模型：`brave_mode`、命令允许列表，以及
 | 键 | 默认值 | 含义 |
 |---|---|---|
 | `providerName` | `junie` | 在 `ctx.subagents` 上的名字 |
-| `command` | 自动解析 | `junie.exe` 路径；省略时从 `~/.local/share/junie/current` 解析 |
+| `command` | 自动检测 | 显式指定启动器路径；路径不存在会报错，而不是静默回退 |
 | `args` | `["--acp=true"]` | 额外参数；`--acp=true` 与 `--skip-update-check` 始终会补齐 |
 | `model` | `mix.normal` | 设置页尚未保存任何值时的兜底模型 |
 | `effort` | `high` | 设置页尚未保存任何值时的兜底思考深度 |

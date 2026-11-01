@@ -8,9 +8,16 @@ returns Junie's final answer as a subagent result.
 ## Requirements
 
 - DSH `>= 0.2.1-rc.2`;
-- the JetBrains Junie CLI installed and signed in — the provider resolves
-  `junie.exe` from `~/.local/share/junie/current` and fails loudly when it
-  cannot start it.
+- the JetBrains Junie CLI installed and signed in. The provider looks for it in
+  this order:
+  1. `JUNIE_PATH`;
+  2. the row `command` config;
+  3. the managed install's `~/.local/share/junie/current` pointer —
+     `<version>/junie/junie.exe` on Windows, `<version>/bin/junie` elsewhere;
+  4. `junie.exe` / `junie` on `PATH`, skipping a `.bat` shim.
+
+  When none of them resolves, the run fails with every path it tried, and the
+  settings page says so instead of showing an empty model list.
 
 ## Install
 
@@ -53,7 +60,7 @@ permission model: `brave_mode`, the action allowlist, and
 | Key | Default | Meaning |
 |---|---|---|
 | `providerName` | `junie` | Name on `ctx.subagents` |
-| `command` | managed install | `junie.exe` path; resolved from `~/.local/share/junie/current` when omitted |
+| `command` | auto-detected | Explicit launcher path; a missing file is reported instead of falling back |
 | `args` | `["--acp=true"]` | Extra arguments; `--acp=true` and `--skip-update-check` are always ensured |
 | `model` | `mix.normal` | Fallback model when the settings page has stored none |
 | `effort` | `high` | Fallback effort when the settings page has stored none |
