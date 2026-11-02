@@ -563,22 +563,46 @@ function createClient(handle, options) {
     })
   }
 
+  /**
+   * Refuse a child request this client does not implement. Silence would leave
+   * the child awaiting a promise that never settles, so an unknown method has
+   * to produce a JSON-RPC error it can fall back from.
+   * @param message - the child's request frame, carrying the id to answer.
+   */
+  const replyUnimplemented = (message) => {
+    write({
+      jsonrpc: '2.0',
+      id: message.id,
+      error: { code: -32601, message: `method not implemented: ${String(message.method)}` },
+    })
+  }
+
   const dispatch = (message) => {
+    // ACP is bidirectional and the two directions number their own requests
+    // independently, both from 1, so an inbound request can reuse an id that is
+    // still pending here. Only the presence of `method` tells the directions
+    // apart; keying on `id` alone resolves a pending request with the child's
+    // request frame, discards the real reply, and strands the child's request.
+    if (typeof message.method === 'string') {
+      if (message.method === 'session/update') {
+        const update = message.params?.update
+        if (update?.sessionUpdate === 'agent_message_chunk' && update.content?.type === 'text') {
+          options.onText(String(update.content.text ?? ''))
+        }
+        return
+      }
+      // A notification carries no id and must not be answered.
+      if (message.id === undefined) return
+      if (message.method === 'session/request_permission') replyPermission(message)
+      else replyUnimplemented(message)
+      return
+    }
     if (message.id !== undefined && pending.has(message.id)) {
       const entry = pending.get(message.id)
       pending.delete(message.id)
       if (message.error) entry.reject(new Error(String(message.error.message ?? 'ACP request failed')))
       else entry.resolve(message.result)
-      return
     }
-    if (message.method === 'session/update') {
-      const update = message.params?.update
-      if (update?.sessionUpdate === 'agent_message_chunk' && update.content?.type === 'text') {
-        options.onText(String(update.content.text ?? ''))
-      }
-      return
-    }
-    if (message.method === 'session/request_permission') replyPermission(message)
   }
 
   handle.stdout?.on('data', (data) => {
