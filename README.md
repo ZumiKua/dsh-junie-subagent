@@ -10,8 +10,8 @@ returns Junie's final answer as a subagent result.
 - DSH `>= 0.2.1-rc.2`;
 - the JetBrains Junie CLI installed and signed in. The provider looks for it in
   this order:
-  1. `JUNIE_PATH`;
-  2. the row `command` config;
+  1. the row `command` config;
+  2. `JUNIE_PATH`;
   3. the managed install's `~/.local/share/junie/current` pointer —
      `<version>/junie/junie.exe` on Windows, `<version>/bin/junie` elsewhere;
   4. `junie.exe` / `junie` on `PATH`, skipping a `.bat` shim.

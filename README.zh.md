@@ -9,8 +9,8 @@ Junie 的最终答复作为子智能体结果返回。
 
 - DSH `>= 0.2.1-rc.2`；
 - 已安装并登录 JetBrains Junie CLI。provider 按下列顺序查找：
-  1. `JUNIE_PATH` 环境变量；
-  2. 插件行的 `command` 配置；
+  1. 插件行的 `command` 配置；
+  2. `JUNIE_PATH` 环境变量；
   3. 托管安装的 `~/.local/share/junie/current` 指针 —— Windows 上是
      `<版本>/junie/junie.exe`，其它平台是 `<版本>/bin/junie`；
   4. `PATH` 上的 `junie.exe` / `junie`（Windows 上跳过 `.bat` shim）。

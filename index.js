@@ -388,9 +388,9 @@ const STOP_REASONS = new Map([
 const DIAGNOSTIC_LIMIT = 4000
 
 /**
- * Locate the Junie launcher without starting it. Resolution order: the
- * `JUNIE_PATH` environment variable, then the explicit row `command`, then the
- * managed install's `current` version pointer, then PATH. The executable name
+ * Locate the Junie launcher without starting it. Resolution order: the explicit
+ * row `command`, then the `JUNIE_PATH` environment variable, then the managed
+ * install's `current` version pointer, then PATH. The executable name
  * is platform-specific, and a Windows shim (`junie.bat`) is never selected: it
  * shells out to PowerShell, which is exactly the surface this provider avoids.
  * @param config - the raw plugin config.
