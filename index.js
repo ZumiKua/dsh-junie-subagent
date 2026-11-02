@@ -24,14 +24,20 @@ import {
 
 export const name = 'junie-subagent'
 
-/** Provider, subprocess seam, and the web route the settings page reads. */
-export const inject = ['subagents', 'subprocess', 'webServer']
+/** Provider, subprocess seam, the web route, and the fence that guards it. */
+export const inject = ['subagents', 'subprocess', 'webServer', 'connection']
 
 /** Diagnostic prefix shared by every failure this plugin reports. */
 const PREFIX = 'junie-subagent'
 
 /** Same-origin route of the settings page; the Host owns the response. */
 const ROUTE_PATH = '/junie-subagent/config'
+
+/** Settings bodies are tiny; anything larger is hostile, so refuse at the wire. */
+const MAX_BODY_BYTES = 64 * 1024
+
+/** Sentinel returned by {@link readJsonBody} when a body exceeds the limit. */
+const BODY_TOO_LARGE = Symbol('body-too-large')
 
 /** Host-side store the provider reads on every run. */
 const SETTINGS_FILE = join(homedir(), '.dsh', 'junie-settings.json')
@@ -71,13 +77,23 @@ function writeStoredSettings(value) {
 }
 
 /**
- * Collect a JSON request body.
+ * Collect a JSON request body, boundedly.
  * @param req - the incoming request.
- * @returns the parsed body, or undefined when it is absent or invalid.
+ * @returns the parsed body, undefined when it is absent or invalid, or
+ * {@link BODY_TOO_LARGE} once the accumulated bytes exceed the limit.
  */
 async function readJsonBody(req) {
   const chunks = []
-  for await (const chunk of req) chunks.push(chunk)
+  let size = 0
+  for await (const chunk of req) {
+    size += chunk.byteLength
+    if (size > MAX_BODY_BYTES) {
+      // Drain the rest so the refusal is a readable response, not a socket cut.
+      req.resume()
+      return BODY_TOO_LARGE
+    }
+    chunks.push(chunk)
+  }
   const text = Buffer.concat(chunks).toString('utf8').trim()
   if (text.length === 0) return undefined
   try {
@@ -253,6 +269,21 @@ function configRouteHandler(ctx, cfg) {
       res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
       res.end(text)
     }
+    // This route changes what the delegated agent may do unbidden (brave mode
+    // among the stored values), so it carries the same fence as `/api`: the
+    // Host/Origin checks that defeat DNS rebinding and cross-site calls, plus
+    // the browser login token. No `connection` service means no fence, so the
+    // route fails closed instead of serving unauthenticated callers.
+    if (typeof ctx.connection?.requestRejection !== 'function') {
+      send(503, { ok: false, error: 'connection service unavailable' })
+      return
+    }
+    const rejection = ctx.connection.requestRejection(req)
+    if (rejection !== undefined) {
+      res.writeHead(rejection, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' })
+      res.end(rejection === 401 ? 'unauthorized' : 'forbidden')
+      return
+    }
     if (req.method === 'GET') {
       const stored = readStoredSettings()
       const models = await listModels(ctx, cfg)
@@ -273,7 +304,18 @@ function configRouteHandler(ctx, cfg) {
       return
     }
     if (req.method === 'PUT' || req.method === 'POST') {
+      // A cross-site caller can only send a "simple" request, so requiring the
+      // JSON media type forces a preflight this route never answers.
+      const essence = String(req.headers['content-type']).split(';', 1)[0]?.trim().toLowerCase()
+      if (essence !== 'application/json') {
+        send(415, { ok: false, error: 'content-type must be application/json' })
+        return
+      }
       const body = await readJsonBody(req)
+      if (body === BODY_TOO_LARGE) {
+        send(413, { ok: false, error: 'request body is too large' })
+        return
+      }
       if (body === undefined || typeof body !== 'object' || body === null) {
         send(400, { ok: false, error: 'invalid JSON body' })
         return
