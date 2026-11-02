@@ -33,6 +33,17 @@ const PREFIX = 'junie-subagent'
 /** Same-origin route of the settings page; the Host owns the response. */
 const ROUTE_PATH = '/junie-subagent/config'
 
+/**
+ * The ACP client capabilities this provider advertises: none.
+ *
+ * It implements no `fs/*` and no `terminal/*` request, so claiming them would
+ * invite the child to route file access through a host that never answers: the
+ * request would hang until `timeoutMs` instead of failing. Declaring nothing
+ * makes the ACP library refuse the call locally, so the child falls back to its
+ * own tools immediately. Mirrors `subagent-acp`, which declares `{}`.
+ */
+const CLIENT_CAPABILITIES = Object.freeze({})
+
 /** Settings bodies are tiny; anything larger is hostile, so refuse at the wire. */
 const MAX_BODY_BYTES = 64 * 1024
 
@@ -124,7 +135,7 @@ async function probeConfigOptions(ctx, cfg) {
   try {
     await client.request('initialize', {
       protocolVersion: 1,
-      clientCapabilities: { fs: { readTextFile: true, writeTextFile: true } },
+      clientCapabilities: CLIENT_CAPABILITIES,
     })
     const session = await client.request('session/new', { cwd, mcpServers: [] })
     sessionId = session?.sessionId
@@ -207,7 +218,7 @@ async function validateChoice(ctx, cfg, model, effort) {
   try {
     await client.request('initialize', {
       protocolVersion: 1,
-      clientCapabilities: { fs: { readTextFile: true, writeTextFile: true } },
+      clientCapabilities: CLIENT_CAPABILITIES,
     })
     const session = await client.request('session/new', { cwd, mcpServers: [] })
     sessionId = session?.sessionId
@@ -658,7 +669,7 @@ async function startRun(ctx, cfg, request) {
   try {
     await client.request('initialize', {
       protocolVersion: 1,
-      clientCapabilities: { fs: { readTextFile: true, writeTextFile: true } },
+      clientCapabilities: CLIENT_CAPABILITIES,
     })
     const session = await client.request('session/new', { cwd, mcpServers: [] })
     sessionId = session?.sessionId
